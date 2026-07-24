@@ -34,6 +34,7 @@ const currentData = (state: Intervention): InterventionData => ({
   isGoodExample: state.isGoodExample,
   isSnow: state.isSnow,
   comment: state.comment,
+  additionalInformation: state.additionalInformation,
   status: state.status,
   createdAt: null,
   updatedAt: null,

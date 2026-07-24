@@ -32,7 +32,7 @@ const convertTimestampToString = (timestamp: any): string | null => {
     : String(timestamp);
 };
 
-const normalizeLegacyFields = (data: Record<string, any>) => ({
+const normalizeLegacyFields = (data: Record<string, any>): Record<string, any> => ({
   ...data,
   comment: data.comment ?? data.commentaire ?? "",
   additionalInformation:
@@ -243,7 +243,9 @@ export const updateSearchInterventionAndMoveToToday = async (
   const caseId = intervention.documentId;
   const activeRef = doc(getActiveReference(userId), caseId);
   const activeSnapshot = await getDoc(activeRef);
-  const currentData = activeSnapshot.exists() ? activeSnapshot.data() : stripUiFields(intervention);
+  const currentData: Record<string, any> = activeSnapshot.exists()
+    ? activeSnapshot.data()
+    : stripUiFields(intervention);
   const todaySnapshotRef = doc(getInterventionsReference(userId, today), caseId);
   const data = stripUiFields(intervention);
   const batch = writeBatch(db);
