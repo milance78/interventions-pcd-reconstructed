@@ -32,12 +32,33 @@ const convertTimestampToString = (timestamp: any): string | null => {
     : String(timestamp);
 };
 
-const normalizeLegacyFields = (data: Record<string, any>): Record<string, any> => ({
-  ...data,
-  comment: data.comment ?? data.commentaire ?? "",
-  additionalInformation:
-    data.additionalInformation ?? data.informationsSupplementaires ?? "",
-});
+const extractLegacyAddressDetail = (details: string, label: string) => {
+  const match = details.match(new RegExp(`(?:^|\n)\s*${label}\s*:\s*(.+)$`, "im"));
+  return match?.[1]?.trim() ?? "";
+};
+
+const normalizeLegacyFields = (data: Record<string, any>): Record<string, any> => {
+  const addressDetails = data.addressDetails ?? "";
+
+  return {
+    ...data,
+    comment: data.comment ?? data.commentaire ?? "",
+    additionalInformation:
+      data.additionalInformation ?? data.informationsSupplementaires ?? "",
+    mailbox:
+      data.mailbox ?? data.mailBox ?? data.box ??
+      extractLegacyAddressDetail(addressDetails, "Bo[iî]te"),
+    floor:
+      data.floor ?? data.etage ??
+      extractLegacyAddressDetail(addressDetails, "[ÉE]tage"),
+    apartment:
+      data.apartment ?? data.appartement ??
+      extractLegacyAddressDetail(addressDetails, "Appartement"),
+    blockNumber:
+      data.blockNumber ?? data.block ??
+      extractLegacyAddressDetail(addressDetails, "Bloc"),
+  };
+};
 
 const mapIntervention = (
   documentId: string,

@@ -2,6 +2,7 @@ import { createAsyncThunk } from "@reduxjs/toolkit";
 import { auth } from "../../firebase/firebaseConfig";
 import { updateIntervention } from "../../firebase/interventionsService";
 import { updateLocalIntervention } from "../features/interventionsListSlice";
+import { updateHistoryIntervention } from "../features/historySlice";
 import type { Intervention } from "../features/newInterventionSlice";
 
 const updateInterventionThunk = createAsyncThunk<
@@ -36,9 +37,11 @@ const updateInterventionThunk = createAsyncThunk<
         isEditing: false,
         isHistoryView: false,
         mode: "TODAY_EDIT",
+        updatedAt: new Date().toISOString(),
       };
 
       dispatch(updateLocalIntervention(updatedIntervention));
+      dispatch(updateHistoryIntervention(updatedIntervention));
       return updatedIntervention;
     } catch (error) {
       return rejectWithValue(

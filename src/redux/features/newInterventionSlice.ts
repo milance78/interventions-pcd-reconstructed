@@ -20,6 +20,10 @@ export interface InterventionData {
   clientID: string;
   mainAddress: string;
   addressDetails: string;
+  mailbox: string;
+  floor: string;
+  apartment: string;
+  blockNumber: string;
   clientsOnAddress: string;
   LOMKey: string;
   phone: string;
@@ -67,6 +71,10 @@ export const emptyInterventionData: InterventionData = {
   clientID: "",
   mainAddress: "",
   addressDetails: "",
+  mailbox: "",
+  floor: "",
+  apartment: "",
+  blockNumber: "",
   clientsOnAddress: "",
   LOMKey: "",
   phone: "",
@@ -117,6 +125,10 @@ const extractData = (state: Intervention): InterventionData => ({
   clientID: state.clientID,
   mainAddress: state.mainAddress,
   addressDetails: state.addressDetails,
+  mailbox: state.mailbox,
+  floor: state.floor,
+  apartment: state.apartment,
+  blockNumber: state.blockNumber,
   clientsOnAddress: state.clientsOnAddress,
   LOMKey: state.LOMKey,
   phone: state.phone,

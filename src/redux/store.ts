@@ -5,6 +5,7 @@ import newInterventionReducer, {
 } from "./features/newInterventionSlice";
 import interventionsListReducer from "./features/interventionsListSlice";
 import statisticsReducer from "./features/statisticsSlice";
+import historyReducer from "./features/historySlice";
 import {
   loadDraftFromStorage,
   localStorageMiddleware,
@@ -14,6 +15,7 @@ export const store = configureStore({
     newIntervention: newInterventionReducer,
     interventionsList: interventionsListReducer,
     statistics: statisticsReducer,
+    history: historyReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(localStorageMiddleware),

@@ -2,6 +2,7 @@ import { createAsyncThunk } from "@reduxjs/toolkit";
 import { auth } from "../../firebase/firebaseConfig";
 import { deleteIntervention } from "../../firebase/interventionsService";
 import { deleteLocalIntervention } from "../features/interventionsListSlice";
+import { deleteHistoryIntervention } from "../features/historySlice";
 
 const getLocalDate = () => {
   const now = new Date();
@@ -26,6 +27,7 @@ const deleteInterventionThunk = createAsyncThunk<
 
     await deleteIntervention(user.uid, dateKey, documentId);
     if (dateKey === getLocalDate()) dispatch(deleteLocalIntervention(documentId));
+    dispatch(deleteHistoryIntervention(documentId));
     return { documentId, dateKey };
   } catch (error) {
     return rejectWithValue(error instanceof Error ? error.message : "Unable to delete intervention");

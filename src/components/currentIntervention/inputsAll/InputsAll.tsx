@@ -5,12 +5,12 @@ import {
   Contact,
   House,
   KeyRound,
-  NotebookTabs,
   PhoneCall,
   TextInitial,
 } from "lucide-react";
 
 import SimpleInput from "../simpleInput/SimpleInput";
+import AddressMiniInput from "../addressMiniInput/AddressMiniInput";
 
 import { ReactComponent as CIDIcon } from "../../../assets/svg/CID.svg.tsx";
 import { ReactComponent as IDIcon } from "../../../assets/svg/ID.svg.tsx";
@@ -95,19 +95,18 @@ const InputsAll = () => {
         />
       </section>
 
-      <section className="inputs-row inputs-row--half">
-        <SimpleInput
-          field="addressDetails"
-          label="Détails d'adresse"
-          inputType="type2"
-          icon={NotebookTabs}
-        />
+      <section className="inputs-row inputs-row--address-details">
+        <AddressMiniInput field="mailbox" label="Boîte" />
+        <AddressMiniInput field="floor" label="Étage" />
+        <AddressMiniInput field="apartment" label="App" />
+        <AddressMiniInput field="blockNumber" label="Bloc" />
 
         <SimpleInput
           field="phone"
           label="Nº de téléphone (GSM)"
           inputType="type2"
           icon={PhoneCall}
+          className="simple-input--phone"
         />
       </section>
     </div>

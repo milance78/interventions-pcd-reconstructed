@@ -1,0 +1,30 @@
+.address-mini-input {
+  min-width: 0 !important;
+
+  .MuiOutlinedInput-root {
+    border-radius: 4px;
+  }
+
+  .MuiOutlinedInput-input {
+    padding-left: 8px;
+    padding-right: 8px;
+    text-align: center;
+  }
+
+  .MuiInputLabel-root {
+    max-width: calc(100% - 16px);
+  }
+
+  .MuiOutlinedInput-notchedOutline {
+    border-color: #bdbdbd;
+  }
+
+  .MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline,
+  .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+    border-color: gray;
+  }
+
+  .MuiInputLabel-root.Mui-focused {
+    color: gray;
+  }
+}

@@ -64,6 +64,218 @@ const findTableValue = (text: string, label: string): string => {
 
 const first = (...values: string[]) => values.find(Boolean) ?? "";
 
+const splitWideCells = (line: string) =>
+  line
+    .split(/\t+| {2,}/)
+    .map(clean)
+    .filter(Boolean);
+
+// Browser table copy/paste uses four spaces between columns. Keeping empty
+// cells is essential: otherwise a blank Mail Box shifts "Etage",
+// "Appartement", "N° de bloc" and "LOM Key" into the wrong inputs.
+const splitTableCells = (line: string) =>
+  line
+    .split(/\t+| {4}/)
+    .map(clean);
+
+const findValueBesideLabel = (text: string, labels: string[]): string => {
+  const allLabels = [
+    "Provisioning Order Id",
+    "ID d'intervention",
+    "OA ID / POI ID",
+    "Code d'erreur",
+    "Descriptions",
+    "Date de création (jj/mm/aaaa hh:mm:ss)",
+    "Date souhaitée (jj/mm/aaaa hh:mm:ss)",
+    "Statut",
+    "Source",
+    "Priorité",
+    "Remarques",
+    "INTERVENTION_ID",
+    "OAG_ID",
+    "INTERVENTION_DESCRIPTION",
+    "CUSTOMER_ID",
+    "LIST_FILTER",
+    "TECHNOLOGY",
+    "TICKET_NUM",
+    "CUST_LANGUAGE",
+  ];
+
+  for (const line of text.split(/\r?\n/)) {
+    const cells = splitWideCells(line);
+    if (cells.length < 2) continue;
+
+    for (const label of labels) {
+      const index = cells.findIndex(
+        (cell) => cell.toLowerCase() === label.toLowerCase(),
+      );
+      if (index < 0) continue;
+
+      const candidate = meaningful(cells[index + 1]);
+      if (
+        candidate &&
+        !allLabels.some(
+          (knownLabel) => knownLabel.toLowerCase() === candidate.toLowerCase(),
+        )
+      ) {
+        return candidate;
+      }
+    }
+  }
+
+  return "";
+};
+
+const extractFixedWidthRow = (
+  text: string,
+  requiredHeader: string,
+  headers: string[],
+): Record<string, string> => {
+  const lines = text.split(/\r?\n/);
+  const headerIndex = lines.findIndex((line) =>
+    line.toLowerCase().includes(requiredHeader.toLowerCase()),
+  );
+  if (headerIndex < 0) return {};
+
+  const headerLine = lines[headerIndex];
+  const positions = headers
+    .map((header) => ({ header, index: headerLine.indexOf(header) }))
+    .filter((item) => item.index >= 0)
+    .sort((a, b) => a.index - b.index);
+  if (!positions.length) return {};
+
+  let valueLine = "";
+  for (let index = headerIndex + 1; index < Math.min(lines.length, headerIndex + 5); index += 1) {
+    if (lines[index].trim()) {
+      valueLine = lines[index];
+      break;
+    }
+  }
+  if (!valueLine) return {};
+
+  const result: Record<string, string> = {};
+  positions.forEach((position, index) => {
+    const end = positions[index + 1]?.index ?? valueLine.length;
+    result[position.header] = meaningful(valueLine.slice(position.index, end));
+  });
+  return result;
+};
+
+const extractContactRow = (text: string): Record<string, string> => {
+  const lines = text.split(/\r?\n/);
+  const headerIndex = lines.findIndex((line) =>
+    line.includes("Nom de la personne de contact") && line.includes("N° de GSM"),
+  );
+  if (headerIndex < 0) return {};
+
+  const valueLine = lines.slice(headerIndex + 1, headerIndex + 5).find((line) => line.trim());
+  if (!valueLine) return {};
+  const values = splitTableCells(valueLine);
+
+  return {
+    "Type de contact": meaningful(values[0]),
+    "Catégorie de contact": meaningful(values[1]),
+    "Nom de la personne de contact": meaningful(values[2]),
+    "Numéro de contact": meaningful(values[3]),
+    "N° de GSM": meaningful(values[4]),
+    "Adresse e-mail": meaningful(values[5]),
+    "Responsable ventes": meaningful(values[6]),
+  };
+};
+
+const extractNewAddressSection = (text: string): string => {
+  const startMatch = /(?:^|\n)\s*Nouvelle adresse\b/i.exec(text);
+  if (!startMatch) return "";
+
+  const start = startMatch.index + startMatch[0].length;
+  const remaining = text.slice(start);
+  const endPatterns = [
+    /(?:^|\n)\s*Ancienne adresse\b/i,
+    /(?:^|\n)\s*Manual TSI\/Design reason\b/i,
+    /(?:^|\n)\s*Stop Servicing Copper Date\b/i,
+    /(?:^|\n)\s*Order Viewer Links\b/i,
+  ];
+
+  const endOffsets = endPatterns
+    .map((pattern) => pattern.exec(remaining)?.index)
+    .filter((index): index is number => typeof index === "number");
+
+  const end = endOffsets.length ? Math.min(...endOffsets) : remaining.length;
+  return remaining.slice(0, end);
+};
+
+const extractNewAddressInfrastructure = (text: string): string => {
+  const section = extractNewAddressSection(text);
+  if (!section) return "";
+
+  for (const line of section.split(/\r?\n/)) {
+    const cells = splitWideCells(line);
+    for (const cell of cells) {
+      if (/^(FIBER|FIBRE)$/i.test(cell)) return "fiber";
+      if (/^(COPPER|CUIVRE)$/i.test(cell)) return "copper";
+    }
+  }
+
+  return "";
+};
+
+const extractAddressRow = (text: string): Record<string, string> => {
+  // Address and infrastructure must come exclusively from the "Nouvelle adresse"
+  // block. Any "Ancienne adresse" block is intentionally ignored.
+  const newAddressSection = extractNewAddressSection(text);
+  if (!newAddressSection) return {};
+
+  const lines = newAddressSection.split(/\r?\n/);
+  const headerIndex = lines.findIndex((line) =>
+    line.includes("N° de maison alphanumérique") && line.includes("LOM Key"),
+  );
+  if (headerIndex < 0) return {};
+
+  const valueLine = lines.slice(headerIndex + 1, headerIndex + 5).find((line) => line.trim());
+  if (!valueLine) return {};
+  const values = splitTableCells(valueLine);
+
+  const labels = [
+    "Pays",
+    "Code postal",
+    "Nom de la ville",
+    "Nom de la rue",
+    "N° de maison",
+    "N° de maison alphanumérique",
+    "Mail Box",
+    "Etage",
+    "Appartement",
+    "N° de bloc",
+    "LOM Key",
+    "subArea",
+    "Indicateur MDU/SDU",
+    "ZONE:",
+  ];
+
+  return Object.fromEntries(
+    labels.map((label, index) => [label, meaningful(values[index])]),
+  );
+};
+
+const extractCustomerRow = (text: string): Record<string, string> => {
+  const lines = text.split(/\r?\n/);
+  const headerIndex = lines.findIndex((line) =>
+    line.includes("ID client") && line.includes("Partner Account ID") && line.includes("Nom de famille"),
+  );
+  if (headerIndex < 0) return {};
+
+  const valueLine = lines.slice(headerIndex + 1, headerIndex + 5).find((line) => line.trim());
+  if (!valueLine) return {};
+  const values = splitTableCells(valueLine);
+
+  return {
+    "ID client": meaningful(values[0]),
+    "Partner Account ID": meaningful(values[1]),
+    "Nom de famille": meaningful(values[2]),
+    Prénom: meaningful(values[3]),
+  };
+};
+
 const detectSource = (text: string): SmartImportResult["sourceType"] => {
   const upper = text.toUpperCase();
   if (upper.includes("SNOW_TITLE") || upper.includes("SNOW_ID")) return "SNOW";
@@ -73,10 +285,10 @@ const detectSource = (text: string): SmartImportResult["sourceType"] => {
   return "UNKNOWN";
 };
 
-const normalizeInfrastructure = (raw: string, text: string) => {
-  const value = `${raw} ${text}`.toUpperCase();
-  if (/\bFIBER\b|\bFIBRE\b|FTTH|UNIFIBER|BROWNFIELD/.test(value)) return "fiber";
-  if (/\bCOPPER\b|VDSL|ADSL|CUIVRE/.test(value)) return "copper";
+const normalizeInfrastructure = (raw: string) => {
+  const value = raw.toUpperCase();
+  if (/\bFIBER\b|\bFIBRE\b/.test(value)) return "fiber";
+  if (/\bCOPPER\b|\bCUIVRE\b/.test(value)) return "copper";
   return "";
 };
 
@@ -98,76 +310,94 @@ const normalizeStatus = (raw: string) => {
 };
 
 const composeClientName = (text: string) => {
+  const contactRow = extractContactRow(text);
+  const contactName = meaningful(contactRow["Nom de la personne de contact"]);
+  if (contactName) return contactName;
+
+  const customerRow = extractCustomerRow(text);
+  const tableName = clean(`${customerRow["Prénom"] ?? ""} ${customerRow["Nom de famille"] ?? ""}`);
+  if (tableName) return tableName;
+
   const explicit = first(
+    findValueBesideLabel(text, ["Nom du client", "CUSTOMER_NAME"]),
     findAfterLabel(text, ["Nom du client", "CUSTOMER_NAME"]),
     findTableValue(text, "Nom de famille"),
   );
   if (explicit && !/^(Prénom|N\.P\.C\.)$/i.test(explicit)) {
-    const firstName = first(findAfterLabel(text, ["CUST_FIRST_NAME"]), findTableValue(text, "Prénom"));
-    if (firstName && !explicit.toLowerCase().includes(firstName.toLowerCase())) return clean(`${explicit} ${firstName}`);
+    const firstName = first(
+      findValueBesideLabel(text, ["CUST_FIRST_NAME"]),
+      findAfterLabel(text, ["CUST_FIRST_NAME"]),
+      findTableValue(text, "Prénom"),
+    );
+    if (firstName && !explicit.toLowerCase().includes(firstName.toLowerCase())) {
+      return clean(`${explicit} ${firstName}`);
+    }
     return explicit;
   }
 
-  const lastName = findAfterLabel(text, ["CUST_LAST_NAME"]);
-  const firstName = findAfterLabel(text, ["CUST_FIRST_NAME"]);
+  const lastName = first(
+    findValueBesideLabel(text, ["CUST_LAST_NAME"]),
+    findAfterLabel(text, ["CUST_LAST_NAME"]),
+  );
+  const firstName = first(
+    findValueBesideLabel(text, ["CUST_FIRST_NAME"]),
+    findAfterLabel(text, ["CUST_FIRST_NAME"]),
+  );
   return clean(`${lastName} ${firstName}`);
 };
 
 const parseStructuredAddress = (text: string) => {
-  const street = first(
-    findAfterLabel(text, ["ADDRESS_STREET_NAME", "Nom de la rue"]),
-    findTableValue(text, "Nom de la rue"),
-  );
-  const number = first(
-    findAfterLabel(text, ["ADDRESS_HOUSE_NUMBER", "N° de maison", "No de maison"]),
-    findTableValue(text, "N° de maison"),
-  );
-  const alpha = first(
-    findAfterLabel(text, ["N° de maison alphanumérique", "No de maison alphanumérique"]),
-    findTableValue(text, "N° de maison alphanumérique"),
-  );
-  const zip = first(
-    findAfterLabel(text, ["ADDRESS_ZIP_CODE", "Code postal"]),
-    findTableValue(text, "Code postal"),
-  );
-  const city = first(
-    findAfterLabel(text, ["ADDRESS_CITY_NAME", "Nom de la ville"]),
-    findTableValue(text, "Nom de la ville"),
-  );
-  const box = first(
-    findAfterLabel(text, ["ADDRESS_BOX", "Mail Box", "Boîte", "Boite"]),
-    findTableValue(text, "Mail Box"),
-  );
-  const floor = first(
-    findAfterLabel(text, ["ADDRESS_FLOOR", "Etage", "Étage"]),
-    findTableValue(text, "Etage"),
-  );
-  const apartment = first(
-    findAfterLabel(text, ["Appartement", "N° appartement", "No appartement"]),
-    findTableValue(text, "Appartement"),
-  );
+  const newAddressSection = extractNewAddressSection(text);
+  const addressRow = extractAddressRow(text);
+  const hasStructuredRow = Object.keys(addressRow).length > 0;
 
-  let mainAddress = "";
+  const rowOrFallback = (
+    rowLabel: string,
+    fallbackLabels: string[],
+  ) => {
+    if (hasStructuredRow) return meaningful(addressRow[rowLabel]);
+    if (!newAddressSection) return "";
+
+    // Even the fallback search is restricted to "Nouvelle adresse". This
+    // prevents fields from an "Ancienne adresse" block being imported.
+    return first(
+      findValueBesideLabel(newAddressSection, fallbackLabels),
+      findAfterLabel(newAddressSection, fallbackLabels),
+      findTableValue(newAddressSection, rowLabel),
+    );
+  };
+
+  const street = rowOrFallback("Nom de la rue", ["ADDRESS_STREET_NAME", "Nom de la rue"]);
+  const number = rowOrFallback("N° de maison", ["ADDRESS_HOUSE_NUMBER", "N° de maison", "No de maison"]);
+  const alpha = rowOrFallback("N° de maison alphanumérique", [
+    "N° de maison alphanumérique",
+    "No de maison alphanumérique",
+  ]);
+  const zip = rowOrFallback("Code postal", ["ADDRESS_ZIP_CODE", "Code postal"]);
+  const city = rowOrFallback("Nom de la ville", ["ADDRESS_CITY_NAME", "Nom de la ville"]);
+  const mailbox = rowOrFallback("Mail Box", ["ADDRESS_BOX", "Mail Box", "Boîte", "Boite"]);
+  const floor = rowOrFallback("Etage", ["ADDRESS_FLOOR", "Etage", "Étage"]);
+  const apartment = rowOrFallback("Appartement", ["Appartement", "N° appartement", "No appartement"]);
+  const blockNumber = rowOrFallback("N° de bloc", ["N° de bloc", "No de bloc", "Block"]);
+
   const house = clean(`${number}${alpha}`);
-  if (street || house) mainAddress = clean(`${street} ${house}`);
-  if (zip || city) mainAddress = [mainAddress, clean(`${zip} ${city}`)].filter(Boolean).join("\n");
+  const streetAndNumber = clean(`${street} ${house}`);
+  const cityLine = clean(`${zip} ${city}`);
+  const mainAddress = streetAndNumber && cityLine
+    ? `${streetAndNumber}, ${cityLine}`
+    : first(streetAndNumber, cityLine);
 
-  if (!mainAddress) {
-    const newAddressMatch = text.match(/Nouvelle adresse\s+(?:Point d'installation[^\n]*\n)?([\s\S]{0,550}?)(?=\n\s*(?:Quadrant|Actions d'ordre|Order Viewer Links|Stop Servicing|Manual TSI|Autres interventions))/i);
-    const block = newAddressMatch?.[1] ?? "";
-    const streetLine = block.match(/Nom de la rue\s+([^,\n]+)\s*,\s*N° de maison\s*([^\n,]+)/i);
-    const postalLine = block.match(/Code postal\s+(\d+)\s*,\s*Nom de la ville\s+([^,\n]+)/i);
-    if (streetLine) mainAddress = clean(`${streetLine[1]} ${streetLine[2]}`);
-    if (postalLine) mainAddress = [mainAddress, clean(`${postalLine[1]} ${postalLine[2]}`)].filter(Boolean).join("\n");
-  }
-
-  const details = [
-    box ? `Boîte : ${box}` : "",
-    floor ? `Étage : ${floor}` : "",
-    apartment ? `Appartement : ${apartment}` : "",
-  ].filter(Boolean).join("\n");
-
-  return { mainAddress, addressDetails: details };
+  return {
+    mainAddress,
+    // Legacy field remains empty. The four dedicated inputs are now the
+    // single source of truth for address details.
+    addressDetails: "",
+    mailbox,
+    floor,
+    apartment,
+    blockNumber,
+    lomKey: hasStructuredRow ? meaningful(addressRow["LOM Key"]) : "",
+  };
 };
 
 const latestHumanJournalMessage = (text: string) => {
@@ -194,61 +424,55 @@ const extractRemarks = (text: string) => {
   return blocks.join("\n\n");
 };
 
-const buildAdditionalInformation = (text: string, sourceType: SmartImportResult["sourceType"]) => {
-  const sections: string[] = [];
-  const workItemId = findAfterLabel(text, ["Work Item ID", "FK_WORKITEM"]);
-  const snowId = findAfterLabel(text, ["SNOW_ID"]);
-  const ticket = findAfterLabel(text, ["Ticket", "TICKET_NUM"]);
-  const language = findAfterLabel(text, ["CUST_LANGUAGE", "Code de langue de communication"]);
-  const area = findAfterLabel(text, ["AREA"]);
-  const localNet = findAfterLabel(text, ["LOCAL_NET", "subArea"]);
-  const remarks = extractRemarks(text);
 
-  sections.push(`Source : ${sourceType}`);
-  if (workItemId) sections.push(`Work Item ID : ${workItemId}`);
-  if (snowId) sections.push(`SNOW ID : ${snowId}`);
-  if (ticket) sections.push(`Ticket : ${ticket}`);
-  if (language) sections.push(`Langue client : ${language}`);
-  if (area) sections.push(`Area : ${area}`);
-  if (localNet) sections.push(`Réseau local : ${localNet}`);
-  if (remarks) sections.push(remarks);
-
-  const previousInterventions = text.match(/Autres interventions d'ordre[\s\S]*?(?=Envoi Notification|Mise à jour intervention|$)/i)?.[0];
-  if (previousInterventions) sections.push(clean(previousInterventions.replace(/\t+/g, " | ")));
-
-  return sections.join("\n\n");
-};
 
 export const parseSmartImport = (rawText: string): SmartImportResult => {
   const text = rawText.replace(/\r/g, "").replace(/\uFFFD/g, "'");
   const sourceType = detectSource(text);
   const address = parseStructuredAddress(text);
+  const customerRow = extractCustomerRow(text);
 
   const interventionId = first(
+    findValueBesideLabel(text, ["INTERVENTION_ID", "ID d'intervention", "Identifyer"]),
     findAfterLabel(text, ["INTERVENTION_ID", "ID d'intervention", "Identifyer"]),
     findTableValue(text, "ID d'intervention"),
   );
   const oagID = first(
+    findValueBesideLabel(text, ["OAG_ID", "OAG ID / PO ID", "Provisioning Order Id"]),
     findAfterLabel(text, ["OAG_ID", "OAG ID / PO ID", "Provisioning Order Id"]),
     findTableValue(text, "OAG ID / PO ID"),
   );
   const snowReference = first(findAfterLabel(text, ["SNOW_ID"]), findAfterLabel(text, ["Ticket"]));
   const description = first(
+    findValueBesideLabel(text, ["INTERVENTION_DESCRIPTION", "NPS_EXC_DESCRIPTION", "Descriptions", "SNOW_TITLE"]),
     findAfterLabel(text, ["INTERVENTION_DESCRIPTION", "NPS_EXC_DESCRIPTION", "Descriptions", "SNOW_TITLE"]),
     findTableValue(text, "Descriptions"),
   );
   const clientID = first(
-    findAfterLabel(text, ["CUSTOMER_ID", "CUST_NUM", "ID client"]),
-    findTableValue(text, "ID client"),
+    findValueBesideLabel(text, ["CUSTOMER_ID", "CUST_NUM"]),
+    findAfterLabel(text, ["CUSTOMER_ID", "CUST_NUM"]),
+    meaningful(customerRow["ID client"]),
   );
+  // Partner Account ID is not an NA value. NA is imported only when an
+  // explicit NA field exists, and it remains empty for fibre interventions.
+  const explicitNa = first(
+    findValueBesideLabel(text, ["NA"]),
+    findAfterLabel(text, ["NA"]),
+  );
+  const contactRow = extractContactRow(text);
   const phone = first(
+    meaningful(contactRow["N° de GSM"]),
+    findValueBesideLabel(text, ["N° de GSM", "Numéro de contact", "CUST_PHONE", "PHONE"]),
     findAfterLabel(text, ["N° de GSM", "Numéro de contact", "CUST_PHONE", "PHONE"]),
     findTableValue(text, "N° de GSM"),
     findTableValue(text, "Numéro de contact"),
   );
-  const lomKey = first(findAfterLabel(text, ["LOM Key", "LOM_KEY"]), findTableValue(text, "LOM Key"));
-  const rawTechnology = findAfterLabel(text, ["TECHNOLOGY", "Access TYPE"]);
-  const rawStatus = first(findAfterLabel(text, ["Status", "Statut", "NPS_STATUS"]), findTableValue(text, "Statut"));
+  // LOM Key is also part of the new-address block and must never be taken
+  // from an old-address section.
+  const lomKey = address.lomKey;
+  const infrastructure = extractNewAddressInfrastructure(text);
+  const na = infrastructure === "fiber" ? "" : explicitNa;
+  const rawStatus = first(findValueBesideLabel(text, ["Status", "Statut", "NPS_STATUS"]), findAfterLabel(text, ["Status", "Statut", "NPS_STATUS"]), findTableValue(text, "Statut"));
   const comment = first(latestHumanJournalMessage(text), findAfterLabel(text, ["Remarques"]));
 
   const values: Partial<InterventionData> = {
@@ -257,16 +481,20 @@ export const parseSmartImport = (rawText: string): SmartImportResult => {
     snowReference,
     interventionDescription: description,
     clientID,
+    na,
     clientName: composeClientName(text),
     mainAddress: address.mainAddress,
     addressDetails: address.addressDetails,
+    mailbox: address.mailbox,
+    floor: address.floor,
+    apartment: address.apartment,
+    blockNumber: address.blockNumber,
     LOMKey: lomKey,
     phone,
-    infrastructure: normalizeInfrastructure(rawTechnology, text),
+    infrastructure: normalizeInfrastructure(infrastructure),
     network: normalizeNetwork(text),
     status: normalizeStatus(rawStatus),
     comment,
-    additionalInformation: buildAdditionalInformation(text, sourceType),
     isSnow: sourceType === "SNOW" || Boolean(snowReference),
     displayAllFields: true,
   };

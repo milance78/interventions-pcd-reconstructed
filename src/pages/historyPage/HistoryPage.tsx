@@ -1,8 +1,6 @@
 import {
-  useEffect,
   useMemo,
   useRef,
-  useState,
   type ElementType,
   type ReactNode,
 } from "react";
@@ -19,7 +17,6 @@ import {
   UserRound,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { onAuthStateChanged } from "firebase/auth";
 
 import "./HistoryPage.scss";
 
@@ -37,8 +34,6 @@ import { ReactComponent as SnowOnIcon } from "../../assets/svg/Snow on.svg.tsx";
 import { loadInterventionFromHistory } from "../../redux/features/newInterventionSlice";
 import { useAppDispatch, useAppSelector } from "../../redux/store";
 import { deleteInterventionThunk } from "../../redux/thunks/deleteInterventionThunk";
-import { auth } from "../../firebase/firebaseConfig";
-import { loadCompleteHistory } from "../../firebase/interventionsService";
 import type { Intervention } from "../../redux/features/newInterventionSlice";
 
 const hasValue = (value?: string | null): value is string =>
@@ -173,6 +168,27 @@ const getInterventionDate = (intervention: unknown): Date | null => {
   return null;
 };
 
+const getActivityDate = (intervention: unknown): Date | null => {
+  const interventionRecord = intervention as Record<string, unknown>;
+
+  const possibleDates = [
+    interventionRecord.updatedAt,
+    interventionRecord.createdAt,
+    interventionRecord.timestamp,
+    interventionRecord.interventionDate,
+    interventionRecord.date,
+    interventionRecord.dateKey,
+  ];
+
+  for (const possibleDate of possibleDates) {
+    const convertedDate = convertToDate(possibleDate);
+
+    if (convertedDate) return convertedDate;
+  }
+
+  return null;
+};
+
 const getDateKey = (date: Date | null) => {
   if (!date) return "unknown-date";
 
@@ -220,34 +236,14 @@ const HistoryPage = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
 
-  const [interventions, setInterventions] = useState<Intervention[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const {
+    interventions,
+    isInitialized,
+    isRefreshing,
+    error: loadError,
+  } = useAppSelector((state) => state.history);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setInterventions([]);
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-      setLoadError("");
-
-      try {
-        const days = await loadCompleteHistory(user.uid);
-        setInterventions(days.flatMap((day) => day.interventions));
-      } catch (error) {
-        console.error("Unable to load history:", error);
-        setLoadError("Impossible de charger l'historique.");
-      } finally {
-        setIsLoading(false);
-      }
-    });
-
-    return unsubscribe;
-  }, []);
+  const isLoading = !isInitialized;
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -280,6 +276,19 @@ const HistoryPage = () => {
           interventions: [intervention],
         });
       }
+    });
+
+    groups.forEach((group) => {
+      group.interventions.sort((firstIntervention, secondIntervention) => {
+        const firstDate = getActivityDate(firstIntervention);
+        const secondDate = getActivityDate(secondIntervention);
+
+        if (!firstDate && !secondDate) return 0;
+        if (!firstDate) return 1;
+        if (!secondDate) return -1;
+
+        return secondDate.getTime() - firstDate.getTime();
+      });
     });
 
     return Array.from(groups.values()).sort((firstGroup, secondGroup) => {
@@ -378,7 +387,10 @@ const HistoryPage = () => {
               <h1>Historique des interventions</h1>
             </div>
 
-            <span className="history-total">
+            <span
+              className={`history-total ${isRefreshing ? "is-refreshing" : ""}`}
+              title={isRefreshing ? "Actualisation en cours" : undefined}
+            >
               {interventions.length} intervention
               {interventions.length === 1 ? "" : "s"}
             </span>
@@ -456,20 +468,12 @@ const HistoryPage = () => {
                           onClick={async () => {
                             if (!intervention.documentId || !intervention.dateKey) return;
 
-                            const result = await dispatch(
+                            await dispatch(
                               deleteInterventionThunk({
                                 documentId: intervention.documentId,
                                 dateKey: intervention.dateKey,
                               }),
                             );
-
-                            if (deleteInterventionThunk.fulfilled.match(result)) {
-                              setInterventions((current) =>
-                                current.filter(
-                                  (item) => item.documentId !== intervention.documentId,
-                                ),
-                              );
-                            }
                           }}
                         >
                           <Trash2 size={17} />
@@ -663,7 +667,7 @@ const HistoryPage = () => {
             </section>
           ))}
 
-          {interventions.length === 0 && (
+          {!isLoading && !loadError && interventions.length === 0 && (
             <div className="history-empty">
               <div className="history-empty-icon">H</div>
 

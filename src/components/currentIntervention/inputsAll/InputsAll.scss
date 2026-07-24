@@ -35,6 +35,18 @@
     }
   }
 
+
+  .inputs-row--address-details {
+    > .address-mini-input {
+      flex: 0 1 10%;
+      width: 10%;
+    }
+
+    .simple-input--phone {
+      flex: 1 1 60%;
+    }
+  }
+
   .inputs-row--main-address {
     .simple-input--main-address {
       flex: 0 1 70%;
@@ -55,10 +67,24 @@
 
     .inputs-row--half,
     .inputs-row--full,
-    .inputs-row--main-address {
+  
+  .inputs-row--address-details {
+    > .address-mini-input {
+      flex: 0 1 10%;
+      width: 10%;
+    }
+
+    .simple-input--phone {
+      flex: 1 1 60%;
+    }
+  }
+
+  .inputs-row--main-address {
       > *,
       .simple-input--main-address,
-      .simple-input--lom-key {
+      .simple-input--lom-key,
+      .address-mini-input,
+      .simple-input--phone {
         flex: 1 1 auto;
         width: 100%;
       }
