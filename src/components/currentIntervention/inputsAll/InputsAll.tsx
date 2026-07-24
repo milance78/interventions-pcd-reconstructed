@@ -8,7 +8,6 @@ import {
   NotebookTabs,
   PhoneCall,
   TextInitial,
-  UserRound,
 } from "lucide-react";
 
 import SimpleInput from "../simpleInput/SimpleInput";
@@ -21,7 +20,7 @@ import { ReactComponent as OAGIcon } from "../../../assets/svg/OAG.svg.tsx";
 const InputsAll = () => {
   return (
     <div className="inputs-all">
-      <section className="inputs-row">
+      <section className="inputs-row inputs-row--half">
         <SimpleInput
           field="interventionId"
           label="ID de l'intervention"
@@ -37,28 +36,12 @@ const InputsAll = () => {
         />
       </section>
 
-      <section className="inputs-row">
+      <section className="inputs-row inputs-row--half">
         <SimpleInput
           field="snowReference"
           label="Référence SNOW"
           inputType="type2"
           icon={Numbers}
-        />
-
-        <SimpleInput
-          field="interventionDescription"
-          label="Description d'intervention"
-          inputType="type2"
-          icon={TextInitial}
-        />
-      </section>
-
-      <section className="inputs-row">
-        <SimpleInput
-          field="clientName"
-          label="Nom du client"
-          inputType="type2"
-          icon={UserRound}
         />
 
         <SimpleInput
@@ -69,7 +52,16 @@ const InputsAll = () => {
         />
       </section>
 
-      <section className="inputs-row">
+      <section className="inputs-row inputs-row--full">
+        <SimpleInput
+          field="interventionDescription"
+          label="Description d'intervention"
+          inputType="type2"
+          icon={TextInitial}
+        />
+      </section>
+
+      <section className="inputs-row inputs-row--half">
         <SimpleInput
           field="na"
           label="NA"
@@ -103,7 +95,7 @@ const InputsAll = () => {
         />
       </section>
 
-      <section className="inputs-row inputs-row--details-phone">
+      <section className="inputs-row inputs-row--half">
         <SimpleInput
           field="addressDetails"
           label="Détails d'adresse"

@@ -22,6 +22,19 @@
     }
   }
 
+  .inputs-row--half {
+    > * {
+      flex: 1 1 50%;
+    }
+  }
+
+  .inputs-row--full {
+    > * {
+      flex: 1 1 100%;
+      width: 100%;
+    }
+  }
+
   .inputs-row--main-address {
     .simple-input--main-address {
       flex: 0 1 70%;
@@ -29,12 +42,6 @@
 
     .simple-input--lom-key {
       flex: 0 1 30%;
-    }
-  }
-
-  .inputs-row--details-phone {
-    > * {
-      flex: 1 1 50%;
     }
   }
 }
@@ -46,16 +53,12 @@
       align-items: stretch;
     }
 
+    .inputs-row--half,
+    .inputs-row--full,
     .inputs-row--main-address {
+      > *,
       .simple-input--main-address,
       .simple-input--lom-key {
-        flex: 1 1 auto;
-        width: 100%;
-      }
-    }
-
-    .inputs-row--details-phone {
-      > * {
         flex: 1 1 auto;
         width: 100%;
       }
